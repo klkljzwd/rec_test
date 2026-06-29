@@ -14,5 +14,6 @@ from .base import RankerModel
 from .registry import register, get_model, list_models
 # 导入各模型实现，触发 @register 注册
 from . import xgb_ranker  # noqa: F401
+from . import lgb_ranker  # noqa: F401
 
 __all__ = ["RankerModel", "register", "get_model", "list_models"]

@@ -29,9 +29,9 @@ PIPELINE = {
 # --------------------------------------------------------------------------- #
 FEATURES = {
     # 候选与负采样
-    "candidate_k": 20,        # val/test 召回候选数
-    "train_candidate_k": 50,  # 训练group大小(1正+其余负)；与candidate_k同值即难度对齐
-    "hard_negative_ratio": 0.75,  # 负样本中难负(召回top)占比，其余为随机负
+    "candidate_k": 200,        # val/test 召回候选数
+    "train_candidate_k": 300,  # 训练group大小(1正+其余负)；与candidate_k同值即难度对齐
+    "hard_negative_ratio": 1.0,  # 负样本中难负(召回top)占比，其余为随机负
     # 协同信号
     "collab": "auto",          # auto|ease|itemknn；auto 按 ease_max_items 选
     "ease_lambda": 250.0,
@@ -53,7 +53,7 @@ MODELS = {
         "model_params": {
             "n_estimators": 606,
             "lr": 0.05,
-            "max_depth": 6,
+            "max_depth": 5,
             "subsample": 0.8,
             "colsample": 0.8,
             "min_child_weight": 1.0,
@@ -67,6 +67,22 @@ MODELS = {
     # "lgb_ranker": {
     #     "model_params": {"n_estimators": 1000, "lr": 0.05, ...},
     # },
+    "lgb_ranker": {
+        "model_params": {
+            "n_estimators": 1000,
+            "lr": 0.05,
+            "max_depth": 6,
+            "num_leaves": 63,        # 2^max_depth 上限，可独立调
+            "subsample": 0.8,
+            "colsample": 0.8,
+            "min_child_weight": 1.0,
+            "reg_lambda": 1.0,
+            "early_stopping": 50,
+            "verbose_eval": 50,
+        },
+        # cat_cols(u_cat/i_cat)在 LGBM 中走 categorical_feature，而非当数值
+        # features/pipeline 用 FEATURES/PIPELINE 默认
+    },
 }
 
 
