@@ -1,14 +1,15 @@
 """推荐任务统一配置。
 
 结构：PIPELINE(流程通用) + FEATURES(特征构建) + MODELS(每模型一套全部参数)。
-模型名即实验名：run.py --exp <模型名> 直接取该模型的全部参数 + FEATURES/PIPELINE
+模型名即实验名：run.py --model <模型名> 直接取该模型的全部参数 + FEATURES/PIPELINE
 默认值合并后跑。无 EXPERIMENTS 间接层。
 
-加载：get_config(model_name, overrides) -> 完整 cfg，传给 pipeline.run_experiment。
-覆盖优先级：命令行 --param > MODELS[name] 的覆盖 > FEATURES/PIPELINE 默认。
+加载：get_config(model_name, overrides) -> 完整 cfg，传给 models.run_experiment
+（dispatcher 路由到 models/<name>/run.py）。JSON 文件入口 get_config_from_file。
+覆盖优先级：命令行 --param > JSON 文件 > MODELS[name] 的覆盖 > FEATURES/PIPELINE 默认。
 
-加新模型：models/ 建 RankerModel 子类 + @register，这里 MODELS 加一项(可内嵌
-features/pipeline 子块覆盖默认)。
+加新模型：models/ 建目录(model/data/run) + @register + @register_runner，
+这里 MODELS 加一项(可内嵌 features/pipeline 子块覆盖默认)。
 命令行覆盖：run.py --param model_params.lr=0.1 / features.candidate_k=200。
 """
 from __future__ import annotations
@@ -29,7 +30,7 @@ PIPELINE = {
 # --------------------------------------------------------------------------- #
 FEATURES = {
     # 候选与负采样
-    "candidate_k": 20,        # val/test 召回候选数
+    "candidate_k": 25,        # val/test 召回候选数
     "train_candidate_k": 50,  # 训练group大小(1正+其余负)；与candidate_k同值即难度对齐
     "hard_negative_ratio": 1.0,  # 负样本中难负(召回top)占比，其余为随机负
     # 协同信号
@@ -38,7 +39,7 @@ FEATURES = {
     "ease_max_items": 1500,    # auto 模式商品数超过此值走 itemknn(避免稠密求逆)
     "itemknn_k": 200,          # itemknn 每行保留 top-k 相似度
     # 折划分
-    "outer_folds": 5,          # holdout 外层折数
+    "outer_folds": 10,          # holdout 外层折数
     "outer_fold": 0,           # holdout 用第几个外层折做验证(0 起)
     "inner_folds": 4,          # holdout 内层 OOF 折数
     "n_folds": 4,              # submit 模式全量 OOF 折数
@@ -89,10 +90,6 @@ MODELS = {
 # --------------------------------------------------------------------------- #
 # 解析与合并
 # --------------------------------------------------------------------------- #
-def list_models() -> list[str]:
-    return sorted(MODELS)
-
-
 def _deep_update(base: dict, override: dict) -> dict:
     out = copy.deepcopy(base)
     for k, v in (override or {}).items():
@@ -109,7 +106,7 @@ def get_config(model_name: str, overrides: dict | None = None) -> dict:
     返回: {model, model_params, features, pipeline, topk, seed, watch_frac, out}。
     """
     if model_name not in MODELS:
-        raise KeyError(f"未知模型 '{model_name}'，可用: {list_models()}")
+        raise KeyError(f"未知模型 '{model_name}'，可用: {sorted(MODELS)}")
     m = copy.deepcopy(MODELS[model_name])
     cfg = {
         "model": model_name,
@@ -151,6 +148,42 @@ def _set_nested(d: dict, keys: list[str], val):
     for k in keys[:-1]:
         d = d.setdefault(k, {})
     d[keys[-1]] = val
+
+
+def get_config_from_file(path: str, overrides: dict | None = None) -> dict:
+    """从 JSON 文件加载配置，与现有 get_config 机制融合。
+
+    优先级（高→低）：CLI --param (overrides) > JSON 文件 > config.MODELS[name]
+    > FEATURES/PIPELINE 默认。
+
+    JSON 格式（get_config 输出子集）：
+      {"model": "xgb_ranker", "mode": ..., "datadir": ...,
+       "model_params": {...}, "features": {...}, "pipeline": {...}, "topk": ...}
+
+    流程：以 JSON 的 model 调 get_config 得默认合并 cfg，再用 JSON 其余字段做
+    _deep_update 深覆盖，最后 --param 走 _apply_overrides。不动 get_config。
+    """
+    import json
+    with open(path, "r", encoding="utf-8") as f:
+        file_cfg = json.load(f)
+    model_name = file_cfg.get("model")
+    if not model_name:
+        raise ValueError("JSON config 缺少 'model' 字段")
+    cfg = get_config(model_name)  # 默认合并
+    for key, val in file_cfg.items():
+        if key == "model":
+            continue
+        if key in ("model_params", "features", "pipeline") and isinstance(val, dict):
+            cfg[key] = _deep_update(cfg.get(key, {}), val)
+        elif key in ("topk", "seed", "watch_frac", "out", "mode", "datadir"):
+            cfg[key] = val
+            if key in ("topk", "seed", "watch_frac", "out") and "pipeline" in cfg:
+                cfg["pipeline"][key] = val
+        else:
+            cfg[key] = val
+    if overrides:
+        cfg = _apply_overrides(cfg, overrides)
+    return cfg
 
 
 if __name__ == "__main__":

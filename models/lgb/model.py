@@ -1,9 +1,10 @@
 """LightGBM LambdaRank 排序器 (lambdarank)。
 
-与 xgb_ranker 同接口(RankerModel)，pipeline 无需改动即可切换。
+从 models/lgb_ranker.py 原样搬入，fit/predict_scores/feature_importance 逐行不变
+（约束 B：不破坏现有分数）。
+
 关键差异：cat_cols(u_cat/i_cat 整数编码)在此真正以类别特征喂给 LGBM
-(categorical_feature)，而非像 XGBoost 那样当连续数值——这是 CLAUDE.md
-里"LGBM 需 categorical_feature"的设计意图。
+(categorical_feature)，而非像 XGBoost 那样当连续数值。
 
 特征矩阵由 build_features 构建为 float32，cat_cols 列里存的是整数码；
 故 fit/predict 前先把 cat_cols 列转 int32 再交给 LGBM（LGBM 要求类别列
@@ -14,8 +15,8 @@ import numpy as np
 import pandas as pd
 import lightgbm as lgb
 
-from .base import RankerModel
-from .registry import register
+from models.base import RankerModel
+from models.registry import register
 
 
 @register

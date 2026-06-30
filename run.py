@@ -15,19 +15,23 @@ PIPELINE 默认值合并后跑。无 EXPERIMENTS 间接层。
       --param model_params.lr=0.03 --param model_params.max_depth=8 \
       --param features.candidate_k=100
 
+  # JSON 配置文件入口（agent 友好，可叠加 --param）
+  python run.py --config experiments/xxx.json --mode holdout
+
   # 列出所有模型 / 查看合并配置
   python run.py --list
   python run.py --show
 
 参数路径：model_params.* / features.* / pipeline.* / topk / seed / out。
-加新模型→models/建文件+@register，config.MODELS加一项。
+加新模型→models/建目录(model/data/run)+@register+@register_runner，config.MODELS加一项。
 """
 from __future__ import annotations
 import argparse
 import json
 
-import pipeline
 import config
+import models
+from models._shared.logging import log_experiment
 
 
 def _coerce(v: str):
@@ -49,12 +53,13 @@ def main():
     ap.add_argument("--out", help="提交输出路径（submit 模式）")
     ap.add_argument("--param", action="append", default=[],
                     help="深路径覆盖，如 model_params.lr=0.1 / features.neg=30（可多次）")
+    ap.add_argument("--config", help="JSON 配置文件路径（覆盖默认 config，可再叠加 --param）")
     ap.add_argument("--list", action="store_true", help="列出所有可用模型")
     ap.add_argument("--show", action="store_true", help="打印合并后配置不运行")
     args = ap.parse_args()
 
     if args.list:
-        print("可用模型:", config.list_models())
+        print("可用模型:", models.list_models())
         return
 
     overrides = {}
@@ -62,7 +67,10 @@ def main():
         k, v = kv.split("=", 1)
         overrides[k] = _coerce(v)
 
-    cfg = config.get_config(args.model, overrides)
+    if args.config:
+        cfg = config.get_config_from_file(args.config, overrides)
+    else:
+        cfg = config.get_config(args.model, overrides)
     cfg["datadir"] = args.datadir
     cfg["mode"] = args.mode
     if args.out:
@@ -73,7 +81,8 @@ def main():
         return
 
     _print_run_config(cfg, overrides)
-    result = pipeline.run_experiment(cfg)
+    result = models.run_experiment(cfg)
+    log_experiment(cfg, result)
     print("[run] result:", json.dumps(result, ensure_ascii=False, default=float))
 
 

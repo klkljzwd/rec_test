@@ -1,11 +1,15 @@
-"""XGBoost LambdaMART 排序器 (rank:pairwise)。"""
+"""XGBoost LambdaMART 排序器 (rank:ndcg)。
+
+从 models/xgb_ranker.py 原样搬入，fit/predict_scores/feature_importance 逐行不变
+（约束 B：不破坏现有分数）。
+"""
 from __future__ import annotations
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from .base import RankerModel
-from .registry import register
+from models.base import RankerModel
+from models.registry import register
 
 
 @register
