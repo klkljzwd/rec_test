@@ -19,8 +19,10 @@ from .registry import (
 # 目录名 = 模型名，load_by_name 按 models.<name>.load 拼路径
 from .xgb_ranker.model import XGBRanker  # noqa: F401
 from .lgb_ranker.model import LGBRanker  # noqa: F401
+from .deepfm.model import DeepFM  # noqa: F401
 from .xgb_ranker import run as _xgb_run  # noqa: F401  触发 @register_runner("xgb_ranker")
 from .lgb_ranker import run as _lgb_run  # noqa: F401  触发 @register_runner("lgb_ranker")
+from .deepfm import run as _deepfm_run  # noqa: F401  触发 @register_runner("deepfm")
 from .dispatcher import run_experiment
 
 __all__ = [
