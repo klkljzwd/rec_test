@@ -3,8 +3,8 @@
 XGB 的特征/候选表由 build_features.py 产出，本模块不重建特征，只做薄封装。
 
 注意：holdout_kwargs/oof_kwargs 的兜底默认值
-(candidate_k=200 / hard_negative_ratio=0.75) 不能"顺手修正"成 config.FEATURES
-默认(25/1.0)。实际值由 get_config 合并后的 feat_cfg 提供，兜底仅在 feat_cfg
+(candidate_k=200 / hard_negative_ratio=0.75) 不能"顺手修正"成模型 config.py 的
+features 默认(25/1.0)。实际值由 load() 合并后的 feat_cfg 提供，兜底仅在 feat_cfg
 缺键时触发——保持兜底不变以保数值可复现。
 """
 from __future__ import annotations

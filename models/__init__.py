@@ -16,10 +16,11 @@ from .registry import (
     register_runner, get_runner,
 )
 # 导入各模型实现，触发 @register（类）+ @register_runner（runner）
-from .xgb.model import XGBRanker  # noqa: F401
-from .lgb.model import LGBRanker  # noqa: F401
-from .xgb import run as _xgb_run  # noqa: F401  触发 @register_runner("xgb_ranker")
-from .lgb import run as _lgb_run  # noqa: F401  触发 @register_runner("lgb_ranker")
+# 目录名 = 模型名，load_by_name 按 models.<name>.load 拼路径
+from .xgb_ranker.model import XGBRanker  # noqa: F401
+from .lgb_ranker.model import LGBRanker  # noqa: F401
+from .xgb_ranker import run as _xgb_run  # noqa: F401  触发 @register_runner("xgb_ranker")
+from .lgb_ranker import run as _lgb_run  # noqa: F401  触发 @register_runner("lgb_ranker")
 from .dispatcher import run_experiment
 
 __all__ = [

@@ -1,7 +1,7 @@
 """推荐任务实验入口。
 
-模型名即实验名：--model <模型名> 直接取 config.MODELS[name] 的全部参数 + FEATURES/
-PIPELINE 默认值合并后跑。无 EXPERIMENTS 间接层。
+模型名即实验名：--model <模型名> 直接取 models/<name>/config.py 的 MODEL_CONFIG
++ FEATURES/PIPELINE 默认值合并后跑。无 EXPERIMENTS 间接层。
 
 用法：
   # 验证（可信 holdout NDCG，本地≈线上）
@@ -23,14 +23,16 @@ PIPELINE 默认值合并后跑。无 EXPERIMENTS 间接层。
   python run.py --show
 
 参数路径：model_params.* / features.* / pipeline.* / topk / seed / out。
-加新模型→models/建目录(model/data/run)+@register+@register_runner，config.MODELS加一项。
+加新模型→models/建目录(model/data/run/config)+@register+@register_runner。
 """
 from __future__ import annotations
 import argparse
 import json
+import sys
 
-import config
 import models
+import experiment
+from models._shared.config_utils import load_by_name, load_from_json
 from models._shared.logging import log_experiment
 
 
@@ -49,7 +51,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--datadir", default="data/A推荐")
     ap.add_argument("--mode", choices=["holdout", "submit"], default="holdout")
-    ap.add_argument("--model", default="xgb_ranker", help="config.MODELS 里的模型名")
+    ap.add_argument("--model", default="xgb_ranker", help="models/<name>/ 里的模型名")
     ap.add_argument("--out", help="提交输出路径（submit 模式）")
     ap.add_argument("--param", action="append", default=[],
                     help="深路径覆盖，如 model_params.lr=0.1 / features.neg=30（可多次）")
@@ -68,21 +70,23 @@ def main():
         overrides[k] = _coerce(v)
 
     if args.config:
-        cfg = config.get_config_from_file(args.config, overrides)
+        cfg = load_from_json(args.config, overrides)
     else:
-        cfg = config.get_config(args.model, overrides)
+        cfg = load_by_name(args.model, overrides)
     cfg["datadir"] = args.datadir
     cfg["mode"] = args.mode
     if args.out:
         cfg["out"] = args.out
 
     if args.show:
+        # 强制 UTF-8 输出（Windows 控制台默认 GBK 会让中文路径写坏），
+        # 保证 --show > cfg.json 后能被 --config / experiment.run 读回。
+        sys.stdout.reconfigure(encoding="utf-8")
         print(json.dumps(cfg, ensure_ascii=False, indent=2, default=str))
         return
 
     _print_run_config(cfg, overrides)
-    result = models.run_experiment(cfg)
-    log_experiment(cfg, result)
+    result = experiment.run_from_cfg(cfg)   # CLI 与程序化入口走同一条路
     print("[run] result:", json.dumps(result, ensure_ascii=False, default=float))
 
 
