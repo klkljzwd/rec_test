@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# 实验产物（可重生成，不入库）
+experiments/results/
+features/*.parquet
+features/*.meta.json
+
+# 提交产物（按需保留，默认忽略；要留某次提交用 git add -f）
+submissions/*.csv
+
+# 临时
+tmp/
+*.tmp

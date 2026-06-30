@@ -12,7 +12,7 @@ load.py，无需改任何中央文件。features/pipeline 值与原中央 config
 MODEL_CONFIG = {
     "model_params": {
         "n_estimators": 606,
-        "lr": 0.05,
+        "lr": 0.06,
         "max_depth": 5,
         "subsample": 0.8,
         "colsample": 0.8,
