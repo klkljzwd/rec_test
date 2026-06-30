@@ -29,8 +29,8 @@ PIPELINE = {
 # --------------------------------------------------------------------------- #
 FEATURES = {
     # 候选与负采样
-    "candidate_k": 200,        # val/test 召回候选数
-    "train_candidate_k": 300,  # 训练group大小(1正+其余负)；与candidate_k同值即难度对齐
+    "candidate_k": 20,        # val/test 召回候选数
+    "train_candidate_k": 50,  # 训练group大小(1正+其余负)；与candidate_k同值即难度对齐
     "hard_negative_ratio": 1.0,  # 负样本中难负(召回top)占比，其余为随机负
     # 协同信号
     "collab": "auto",          # auto|ease|itemknn；auto 按 ease_max_items 选

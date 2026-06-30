@@ -49,6 +49,9 @@ def _feature_schema(ucols, icols):
             "count",
             "count_norm",
             "popularity",
+            "is_known_target",
+            "target_freq",
+            "target_freq_log",
             "repeat",
             "collab_score",
             "markov",
@@ -173,6 +176,10 @@ def _build_fold_stats(
         ),
         dtype=np.int64,
     )
+    # target 先验：商品作为训练 target 的频次（与 popularity 曝光度互补）。
+    # 按折统计 -> 验证折 target 不进自身特征，无泄漏。
+    target_count = core.build_target_freq(records, n_item, iid2idx)
+    target_count_max = int(target_count.max()) if target_count.size else 0
     return {
         "pop": pop,
         "collab": collab,
@@ -180,6 +187,8 @@ def _build_fold_stats(
         "htarget": htarget,
         "user_cond": user_cond,
         "target_pool": target_pool,
+        "target_count": target_count,
+        "target_count_max": target_count_max,
         "selected_collab": selected,
     }
 
@@ -308,11 +317,25 @@ def _assemble_features(candidates, ded, counts, uid, context, stats):
         normalize=False,
     )[candidates]
 
+    # target 先验三列：是否曾作训练 target / 频次(归一) / 频次(log 归一)。
+    tc = stats["target_count"][candidates].astype(np.float32)
+    tc_max = float(stats["target_count_max"])
+    is_known_target = (tc > 0).astype(np.float32)
+    if tc_max > 0:
+        target_freq = tc / tc_max
+        target_freq_log = np.log1p(tc) / np.log1p(tc_max)
+    else:
+        target_freq = np.zeros_like(tc)
+        target_freq_log = np.zeros_like(tc)
+
     columns = [
         in_history[:, None],
         count[:, None],
         count_norm[:, None],
         stats["pop"][candidates, None],
+        is_known_target[:, None],
+        target_freq[:, None],
+        target_freq_log[:, None],
         repeat[:, None],
         collaborative[:, None],
         markov[:, None],

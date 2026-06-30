@@ -20,7 +20,7 @@ class XGBRanker(RankerModel):
         dtr.set_group(np.asarray(tr_groups, np.int64))
 
         params = dict(
-            objective="rank:pairwise", eval_metric="ndcg",
+            objective="rank:ndcg", eval_metric="ndcg@10",
             learning_rate=p.get("lr", 0.05), max_depth=p.get("max_depth", 6),
             subsample=p.get("subsample", 0.8), colsample_bytree=p.get("colsample", 0.8),
             min_child_weight=p.get("min_child_weight", 1.0),

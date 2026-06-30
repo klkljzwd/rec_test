@@ -108,6 +108,25 @@ def build_target_prior(records, n_item, iid2idx):
     return is_target
 
 
+def build_target_freq(records, n_item, iid2idx):
+    """每个商品作为训练 target 出现的次数（target 先验频率）。
+
+    与 build_popularity（历史序列曝光度）不同：这里统计商品"真正成为 target"的
+    频次。A 榜仅 ~235 个 item 曾作训练 target，故该信号近二值且强——可救 44% 非
+    repeat target 与 35% 冷启动用户（这两类 repeat/markov/htarget 全失效）。
+
+    必须按 OOF 折统计（只含训练折的 target），验证折 target 不得进自身特征；
+    test 用全量训练统计（test target 隐藏，无泄漏）。这些隔离由 _build_fold_stats
+    的按折构建天然保证。
+    """
+    freq = np.zeros(n_item, dtype=np.int32)
+    for _, _, target in records:
+        idx = iid2idx.get(target) if target else None
+        if idx is not None:
+            freq[idx] += 1
+    return freq
+
+
 def build_user_item_matrix(records, n_item, iid2idx):
     rows: list[int] = []
     cols: list[int] = []
