@@ -7,12 +7,13 @@
 MODEL_CONFIG = {
     "model_params": {
         "embedding_dim": 8,         # 每个 cat 列的 embedding 维度
-        "hidden_dims": [256, 128],  # DNN 隐藏层
+        "hidden_dims": [64, 64],  # DNN 隐藏层
         "lr": 0.001,
         "batch_size": 4096,
         "epochs": 20,
         "early_stopping": 3,        # watch ndcg@10 连续不升的 epoch 数
         "dropout": 0.2,
+        "device": "auto",           # auto(有GPU用GPU)/cpu/cuda，可被 run.py --device 覆盖
         "seed": 42,
     },
     "features": {

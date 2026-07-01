@@ -87,6 +87,21 @@ class _DeepFMNet(nn.Module):
 class DeepFM(RankerModel):
     name = "deepfm"
 
+    def _resolve_device(self, spec: str) -> torch.device:
+        """auto/cpu/cuda -> torch.device。auto 时有 cuda 才用 cuda。"""
+        spec = spec or "auto"
+        if spec == "cpu":
+            return torch.device("cpu")
+        if spec == "cuda":
+            if not torch.cuda.is_available():
+                print("[deepfm] 指定 cuda 但不可用，回退 cpu")
+                return torch.device("cpu")
+            return torch.device("cuda")
+        # auto
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")
+
     def _split_feats(self, df: pd.DataFrame, feat_cols: list[str],
                      cat_cols: list[str]):
         """拆数值/类别，cat 值转 LongTensor 并把 -1 映射到各自 vocab_size 槽。"""
@@ -117,21 +132,23 @@ class DeepFM(RankerModel):
             self._vocab[c] = int(vals.max()) + 1 if len(vals) else 1
 
         num_num = len([c for c in feat_cols if c not in self._cat_cols])
+        self._device = self._resolve_device(p.get("device", "auto"))
+        print(f"[deepfm] device={self._device}", flush=True)
         self.net = _DeepFMNet(
             num_num_feats=num_num, cat_vocab_sizes=self._vocab,
             embed_dim=p.get("embedding_dim", 8),
             hidden_dims=p.get("hidden_dims", [256, 128]),
             dropout=p.get("dropout", 0.2),
-        )
+        ).to(self._device)
         opt = torch.optim.Adam(self.net.parameters(), lr=p.get("lr", 0.001))
         loss_fn = nn.BCEWithLogitsLoss()
 
         # 准备训练张量
         num_x, cat_x, _, _ = self._split_feats(tr_df, feat_cols, self._cat_cols)
         y = tr_df["label"].to_numpy(np.float32)
-        num_t = torch.from_numpy(num_x)
-        cat_t = {c: torch.from_numpy(cat_x[c]) for c in cat_x}
-        y_t = torch.from_numpy(y)
+        num_t = torch.from_numpy(num_x).to(self._device)
+        cat_t = {c: torch.from_numpy(cat_x[c]).to(self._device) for c in cat_x}
+        y_t = torch.from_numpy(y).to(self._device)
         n = len(tr_df)
         bs = p.get("batch_size", 4096)
         epochs = p.get("epochs", 20)
@@ -177,8 +194,8 @@ class DeepFM(RankerModel):
     def _predict_internal(self, df: pd.DataFrame) -> np.ndarray:
         num_x, cat_x, _, _ = self._split_feats(df, self._feat_cols, self._cat_cols)
         with torch.no_grad():
-            num_t = torch.from_numpy(num_x)
-            cat_t = {c: torch.from_numpy(cat_x[c]) for c in cat_x}
+            num_t = torch.from_numpy(num_x).to(self._device)
+            cat_t = {c: torch.from_numpy(cat_x[c]).to(self._device) for c in cat_x}
             return self.net(num_t, cat_t).cpu().numpy().astype(np.float32)
 
     def predict_scores(self, df, feat_cols):

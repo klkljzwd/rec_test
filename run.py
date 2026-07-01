@@ -51,11 +51,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--datadir", default="data/A推荐")
     ap.add_argument("--mode", choices=["holdout", "submit"], default="holdout")
-    ap.add_argument("--model", default="xgb_ranker", help="models/<name>/ 里的模型名")
+    ap.add_argument("--model", default="deepfm", help="models/<name>/ 里的模型名")
     ap.add_argument("--out", help="提交输出路径（submit 模式）")
     ap.add_argument("--param", action="append", default=[],
                     help="深路径覆盖，如 model_params.lr=0.1 / features.neg=30（可多次）")
     ap.add_argument("--config", help="JSON 配置文件路径（覆盖默认 config，可再叠加 --param）")
+    ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default=None,
+                    help="计算设备：auto(有GPU用GPU)/cpu/cuda。仅深度学习模型(如deepfm)生效，默认 auto")
     ap.add_argument("--list", action="store_true", help="列出所有可用模型")
     ap.add_argument("--show", action="store_true", help="打印合并后配置不运行")
     args = ap.parse_args()
@@ -77,6 +79,10 @@ def main():
     cfg["mode"] = args.mode
     if args.out:
         cfg["out"] = args.out
+    if args.device:
+        # 透传到 model_params.device，供深度学习模型(如 deepfm)读取。
+        # 树模型(xgb/lgb)忽略此参数。
+        cfg.setdefault("model_params", {})["device"] = args.device
 
     if args.show:
         # 强制 UTF-8 输出（Windows 控制台默认 GBK 会让中文路径写坏），
