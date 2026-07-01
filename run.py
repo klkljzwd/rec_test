@@ -50,7 +50,7 @@ def _coerce(v: str):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--datadir", default="data/A推荐")
-    ap.add_argument("--mode", choices=["holdout", "submit"], default="submit")
+    ap.add_argument("--mode", choices=["holdout", "submit"], default="holdout")
     ap.add_argument("--model", default="xgb_ranker", help="models/<name>/ 里的模型名")
     ap.add_argument("--out", help="提交输出路径（submit 模式）")
     ap.add_argument("--param", action="append", default=[],
@@ -108,6 +108,7 @@ def _print_run_config(cfg: dict, overrides: dict):
           f"train_candidate_k={f['train_candidate_k']}{'(难度对齐)' if aligned else ''} "
           f"hard_ratio={f['hard_negative_ratio']} collab={f['collab']} "
           f"outer={f['outer_folds']}/{f['outer_fold']} inner={f['inner_folds']}")
+    print(f"[config] recall_weights: {f.get('score_weights', {})}")
     mp_str = " ".join(f"{k}={v}" for k, v in mp.items() if k != "verbose_eval")
     print(f"[config] model_params: {mp_str}")
     print(f"[config] pipeline: watch_frac={p['watch_frac']} out={cfg['out']}")

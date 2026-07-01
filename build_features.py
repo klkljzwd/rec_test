@@ -369,7 +369,9 @@ def _user_condition_components(user_values, candidates, context, stats):
 
 
 def _all_item_scores(ded, counts, uid, context, stats, score_weights=None):
-    weights = DEFAULT_SCORE_WEIGHTS if score_weights is None else score_weights
+    # 允许 config 只覆盖部分权重，未提供的键继续使用稳定默认值。
+    weights = dict(DEFAULT_SCORE_WEIGHTS)
+    weights.update(score_weights or {})
     repeat, collaborative, markov, htarget = _user_full_scores(ded, counts, context, stats)
     user_cond = _user_condition_score(context["user_raw"].get(uid), context, stats, normalize=True)
     # target 先验参与候选生成，而不只作为 ranker 特征。统计严格来自当前训练折；
@@ -544,6 +546,7 @@ def _build_oof_from_context(
     itemknn_k,
     train_candidate_k,
     hard_negative_ratio,
+    score_weights=None,
 ):
     """构建 cross-fitted 训练特征。
 
@@ -588,7 +591,8 @@ def _build_oof_from_context(
 
             # 召回足够多的候选作为难负来源池(至少要能凑够 neg 个难负)
             ranked = _generate_candidates(
-                ded, counts, uid, context, stats, min(max(neg, 1), n_item))
+                ded, counts, uid, context, stats, min(max(neg, 1), n_item),
+                score_weights=score_weights)
             negatives = _sample_negatives(
                 target_idx, ranked, stats["target_pool"], n_item,
                 neg, rng, hard_negative_ratio)
@@ -630,6 +634,7 @@ def build_oof_features(
     itemknn_k=200,
     train_candidate_k=200,
     hard_negative_ratio=0.75,
+    score_weights=None,
 ):
     """为最终排序器训练生成全量 cross-fitted 特征。
 
@@ -648,6 +653,7 @@ def build_oof_features(
         itemknn_k,
         train_candidate_k,
         hard_negative_ratio,
+        score_weights,
     )
     print(f"[OOF] 完成 rows={len(result[0])} elapsed={time.perf_counter() - start:.1f}s")
     return result
@@ -659,6 +665,7 @@ def _build_validation_features(
     stats,
     candidate_k,
     seed,
+    score_weights=None,
 ):
     """不强塞正样本，为Outer validation构建真实候选及标签。"""
     candidate_k = min(candidate_k, context["n_item"])
@@ -680,7 +687,9 @@ def _build_validation_features(
         target_idx = context["iid2idx"][target]
         length = int(rng.choice(context["test_lengths"]))
         ded, counts = core.truncate_runs(context["runs"][record_idx], length)
-        candidates = _generate_candidates(ded, counts, uid, context, stats, candidate_k)
+        candidates = _generate_candidates(
+            ded, counts, uid, context, stats, candidate_k,
+            score_weights=score_weights)
         group_features = _assemble_features(candidates, ded, counts, uid, context, stats)
         end = cursor + candidate_k
         features[cursor:end] = group_features
@@ -714,6 +723,7 @@ def build_holdout_features(
     itemknn_k=200,
     train_candidate_k=200,
     hard_negative_ratio=0.75,
+    score_weights=None,
 ):
     """生成一套无二级泄漏的排序器训练集与Outer validation集。
 
@@ -739,6 +749,7 @@ def build_holdout_features(
         itemknn_k,
         train_candidate_k,
         hard_negative_ratio,
+        score_weights,
     )
     stats = _build_fold_stats(
         context,
@@ -754,6 +765,7 @@ def build_holdout_features(
         stats,
         candidate_k,
         seed + 202,
+        score_weights,
     )
     train_frame, feat_cols, cat_cols, train_groups = train_result
     print(
@@ -779,6 +791,7 @@ def build_test_features(
     ease_lambda=250.0,
     ease_max_items=1500,
     itemknn_k=200,
+    score_weights=None,
 ):
     """使用全训练统计构建测试候选特征，列结构与 OOF 完全一致。"""
     start = time.perf_counter()
@@ -808,7 +821,9 @@ def build_test_features(
     ):
         ded = core._split(dedup_text)
         counts = core._parse_counts(count_text)
-        candidates = _generate_candidates(ded, counts, uid, context, stats, candidate_k)
+        candidates = _generate_candidates(
+            ded, counts, uid, context, stats, candidate_k,
+            score_weights=score_weights)
         group_features = _assemble_features(candidates, ded, counts, uid, context, stats)
         end = cursor + candidate_k
         features[cursor:end] = group_features
@@ -841,6 +856,7 @@ def evaluate_recall(
     ease_lambda=250.0,
     ease_max_items=1500,
     itemknn_k=200,
+    score_weights=None,
 ):
     """按OOF协议评价真实候选Recall；允许重复商品并使用冷启动用户特征。"""
     start = time.perf_counter()
@@ -868,7 +884,9 @@ def evaluate_recall(
             target_idx = context["iid2idx"][target]
             length = int(rng.choice(context["test_lengths"]))
             ded, counts = core.truncate_runs(context["runs"][record_idx], length)
-            candidates = _generate_candidates(ded, counts, uid, context, stats, k)
+            candidates = _generate_candidates(
+                ded, counts, uid, context, stats, k,
+                score_weights=score_weights)
             hit = float(target_idx in set(int(idx) for idx in candidates))
             bucket = f"L={length}" if length <= 3 else "L>=4"
             buckets.setdefault(bucket, []).append(hit)

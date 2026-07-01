@@ -21,6 +21,15 @@ FEATURES = {
     "candidate_k": 25,        # val/test 召回候选数
     "train_candidate_k": 50,  # 训练group大小(1正+其余负)；与candidate_k同值即难度对齐
     "hard_negative_ratio": 1.0,  # 负样本中难负(召回top)占比，其余为随机负
+    "score_weights": {        # 候选生成信号权重，可用深路径 --param 单独覆盖
+        "pop": 2.0,
+        "target_prior": 6.0,
+        "repeat": 20.0,
+        "collab": 2.0,
+        "markov": 1.0,
+        "htarget": 30.0,
+        "user_cond": 15.0,
+    },
     # 协同信号
     "collab": "auto",          # auto|ease|itemknn；auto 按 ease_max_items 选
     "ease_lambda": 250.0,

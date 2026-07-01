@@ -91,6 +91,7 @@ metrics = experiment.run("cfg.json", overrides={"features.candidate_k": 200})  #
 - `candidate_k=25`：val/test 召回候选数。
 - `train_candidate_k=50`：训练 group 大小（1正+其余负）。与 candidate_k 同值=难度对齐；当前不对齐（50>25），实测效果好。
 - `hard_negative_ratio=1.0`：负样本中难负（召回 top）占比。
+- `score_weights`：候选生成的 pop/target_prior/repeat/collab/markov/htarget/user_cond 权重；支持如 `--param features.score_weights.target_prior=0` 的深路径覆盖。
 - `collab=auto`：A 榜 2156>1500 走稀疏 ItemKNN（非 EASE）；想跑真 EASE 用 `--param features.collab=ease`。
 - 折划分：`outer_folds=10/outer_fold=0/inner_folds=4`（holdout）、`n_folds=4`（submit）。
 - `watch_frac=0.2`：holdout 从 train 切独立 watch 做 early-stop 的比例。

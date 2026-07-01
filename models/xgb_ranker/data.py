@@ -21,7 +21,8 @@ def holdout_kwargs(f: dict) -> dict:
                 ease_max_items=f.get("ease_max_items", 1500),
                 itemknn_k=f.get("itemknn_k", 200),
                 train_candidate_k=f.get("train_candidate_k", 200),
-                hard_negative_ratio=f.get("hard_negative_ratio", 0.75))
+                hard_negative_ratio=f.get("hard_negative_ratio", 0.75),
+                score_weights=f.get("score_weights"))
 
 
 def oof_kwargs(f: dict) -> dict:
@@ -31,14 +32,16 @@ def oof_kwargs(f: dict) -> dict:
                 ease_max_items=f.get("ease_max_items", 1500),
                 itemknn_k=f.get("itemknn_k", 200),
                 train_candidate_k=f.get("train_candidate_k", 200),
-                hard_negative_ratio=f.get("hard_negative_ratio", 0.75))
+                hard_negative_ratio=f.get("hard_negative_ratio", 0.75),
+                score_weights=f.get("score_weights"))
 
 
 def test_kwargs(f: dict) -> dict:
     return dict(candidate_k=f.get("candidate_k", 200), collab_method=f.get("collab", "auto"),
                 ease_lambda=f.get("ease_lambda", 250.0),
                 ease_max_items=f.get("ease_max_items", 1500),
-                itemknn_k=f.get("itemknn_k", 200))
+                itemknn_k=f.get("itemknn_k", 200),
+                score_weights=f.get("score_weights"))
 
 
 def build_holdout(datadir, feat_cfg):
