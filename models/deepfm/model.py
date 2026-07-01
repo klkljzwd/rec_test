@@ -45,10 +45,12 @@ class _DeepFMNet(nn.Module):
         })
         n_cat_embed = len(self.cat_cols) * embed_dim
 
-        # FM 一阶：数值线性 + 每 cat embedding 一阶（求和到标量）
+        # FM 一阶：数值特征走线性层；每个类别值拥有独立的标量权重。
+        # 这里必须使用 Embedding 按类别索引查表，不能用需要 one-hot 输入的 Linear，
+        # 也不能复用二阶 embedding，否则类别主效应会与交互表示相互牵制。
         self.num_first = nn.Linear(num_num_feats, 1, bias=False)
         self.cat_first = nn.ModuleDict({
-            c: nn.Linear(vs + 1, 1, bias=False) for c, vs in cat_vocab_sizes.items()
+            c: nn.Embedding(vs + 1, 1) for c, vs in cat_vocab_sizes.items()
         })
 
         # DNN：cat embedding flatten + 数值 → MLP
@@ -66,8 +68,8 @@ class _DeepFMNet(nn.Module):
         # FM 一阶
         first = self.num_first(num_x)  # [B,1]
         for c in self.cat_cols:
-            # embedding 一阶：对每个样本取其 cat 对应 embedding 的和
-            first = first + self.embeddings[c](cat_x[c]).sum(dim=1, keepdim=True)
+            # 一维 embedding 直接给出该类别的一阶标量贡献。
+            first = first + self.cat_first[c](cat_x[c])
         # FM 二阶：(sum e)^2 - sum(e^2)，内积形式
         if embeds:
             sum_emb = torch.stack(embeds, dim=1).sum(dim=1)   # [B, D]
