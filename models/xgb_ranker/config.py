@@ -11,14 +11,14 @@ load.py，无需改任何中央文件。features/pipeline 值与原中央 config
 """
 MODEL_CONFIG = {
     "model_params": {
-        "n_estimators": 606,
+        "n_estimators": 3000,
         "lr": 0.06,
         "max_depth": 5,
         "subsample": 0.8,
         "colsample": 0.8,
         "min_child_weight": 1.0,
         "reg_lambda": 1.0,
-        "early_stopping": 50,
+        "early_stopping": 300,
         "verbose_eval": 50,
     },
     "features": {
@@ -28,7 +28,7 @@ MODEL_CONFIG = {
         "score_weights": {
             "pop": 2.0,
             "target_prior": 0.0,
-            "repeat": 20.0,
+            "repeat": 30.0,
             "collab": 2.0,
             "markov": 1.0,
             "htarget": 30.0,

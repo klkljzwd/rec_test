@@ -6,7 +6,7 @@
 """
 MODEL_CONFIG = {
     "model_params": {
-        "n_estimators": 1000,
+        "n_estimators": 1500,
         "lr": 0.05,
         "max_depth": 6,
         "num_leaves": 63,        # 2^max_depth 上限，可独立调
@@ -23,8 +23,8 @@ MODEL_CONFIG = {
         "hard_negative_ratio": 1.0,
         "score_weights": {
             "pop": 2.0,
-            "target_prior": 6.0,
-            "repeat": 20.0,
+            "target_prior": 0.0,
+            "repeat": 30.0,
             "collab": 2.0,
             "markov": 1.0,
             "htarget": 30.0,
@@ -42,7 +42,7 @@ MODEL_CONFIG = {
     "pipeline": {
         "topk": 10,
         "seed": 42,
-        "watch_frac": 0.2,
+        "watch_frac": 0.1,
         "out": "submissions/submission.csv",
     },
 }
