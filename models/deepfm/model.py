@@ -154,25 +154,61 @@ class DeepFM(RankerModel):
         n = len(tr_df)
         bs = p.get("batch_size", 4096)
         epochs = p.get("epochs", 20)
+        loss_kind = p.get("loss", "pointwise")
+
+        # listwise 需按整 group 采样（tr_groups[i] = 第 i 个 group 的行数）。
+        # pointwise 沿用整行打乱（向后兼容，且不依赖 group）。
+        if loss_kind == "listwise":
+            groups = [int(g) for g in tr_groups]
+            group_offsets = torch.tensor(
+                [0] + [int(np.cumsum(groups)[k]) for k in range(len(groups))],
+                dtype=torch.long, device=self._device,
+            )
+            n_groups = len(groups)
+            print(f"[deepfm] loss=listwise (ListNet, 按 group={groups[0]} 采样)", flush=True)
+        else:
+            print("[deepfm] loss=pointwise (BCE, 整行打乱)", flush=True)
 
         # watch 集评估用（va_df 是从 train 切的独立 watch，不是最终 val）
         self.net.train()
         best_ndcg, best_state, no_improve = -1.0, None, 0
         es = p.get("early_stopping", 3)
         for ep in range(epochs):
-            perm = torch.randperm(n)
             total_loss = 0.0
-            for i in range(0, n, bs):
-                idx = perm[i:i + bs]
-                bx = num_t[idx]
-                bc = {c: cat_t[c][idx] for c in cat_t}
-                by = y_t[idx]
-                opt.zero_grad()
-                logit = self.net(bx, bc)
-                loss = loss_fn(logit, by)
-                loss.backward()
-                opt.step()
-                total_loss += loss.item() * len(idx)
+            if loss_kind == "listwise":
+                gperm = torch.randperm(n_groups, device=self._device)
+                # 每 step 取若干整 group；group_size 固定（candidate_k/trian_candidate_k）
+                # bs 取每 step 处理的候选行数，反推 group 数。
+                grp_per_step = max(1, bs // int(groups[0]))
+                for i in range(0, n_groups, grp_per_step):
+                    gi = gperm[i:i + grp_per_step]
+                    starts = group_offsets[gi]
+                    ends = group_offsets[gi + 1]
+                    # 整 group 的行索引（group 间连续，故可切片）
+                    s, e = int(starts.min()), int(ends.max())
+                    bx = num_t[s:e]
+                    bc = {c: cat_t[c][s:e] for c in cat_t}
+                    by = y_t[s:e]
+                    opt.zero_grad()
+                    logit = self.net(bx, bc)            # [e-s]
+                    # 按 group 拆 logit 做 ListNet：每 group softmax+CE 对正样本。
+                    loss = self._listnet_loss(logit, by, starts, ends)
+                    loss.backward()
+                    opt.step()
+                    total_loss += loss.item() * (e - s)
+            else:
+                perm = torch.randperm(n, device=self._device)
+                for i in range(0, n, bs):
+                    idx = perm[i:i + bs]
+                    bx = num_t[idx]
+                    bc = {c: cat_t[c][idx] for c in cat_t}
+                    by = y_t[idx]
+                    opt.zero_grad()
+                    logit = self.net(bx, bc)
+                    loss = loss_fn(logit, by)
+                    loss.backward()
+                    opt.step()
+                    total_loss += loss.item() * len(idx)
             # watch ndcg@10 early-stop
             msg = f"[deepfm] epoch {ep+1}/{epochs} loss={total_loss/n:.4f}"
             if va_df is not None:
@@ -199,6 +235,28 @@ class DeepFM(RankerModel):
             num_t = torch.from_numpy(num_x).to(self._device)
             cat_t = {c: torch.from_numpy(cat_x[c]).to(self._device) for c in cat_x}
             return self.net(num_t, cat_t).cpu().numpy().astype(np.float32)
+
+    def _listnet_loss(self, logit, label, starts, ends):
+        """ListNet：每个 group 对 logits 做 softmax，与标签的 softmax 做 CE。
+
+        标签含 1 个正样本(label=1)，故标签分布是 one-hot，CE 退化为
+        -log_softmax(logit)[正样本位置] 的负对数似然。按 group 求和后除以 group 数。
+        ListNet 是 listwise 排序损失，直接优化 group 内正样本排名，与 NDCG 对齐
+        （xgb rank:ndcg 同理），弥补 pointwise BCE 不感知相对顺序的结构缺陷。
+        """
+        device = logit.device
+        total = logit.new_zeros(())
+        for k in range(starts.shape[0]):
+            s, e = int(starts[k]), int(ends[k])
+            g_logit = logit[s:e]                       # [g]
+            g_label = label[s:e]                       # [g]
+            probs = torch.softmax(g_logit, dim=0)
+            mask = g_label > 0.5
+            if not bool(mask.any()):
+                continue
+            pos_prob = probs[mask].sum()               # 正样本分配到的概率
+            total = total - torch.log(pos_prob + 1e-12)
+        return total / starts.shape[0]
 
     def predict_scores(self, df, feat_cols):
         return self._predict_internal(df)

@@ -14,6 +14,7 @@ MODEL_CONFIG = {
         "early_stopping": 3,        # watch ndcg@10 连续不升的 epoch 数
         "dropout": 0.2,
         "device": "auto",           # auto(有GPU用GPU)/cpu/cuda，可被 run.py --device 覆盖
+        "loss": "listwise",         # pointwise(BCE,原默认)/listwise(ListNet,与NDCG对齐)
         "seed": 42,
     },
     "features": {
