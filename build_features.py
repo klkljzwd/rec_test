@@ -34,6 +34,7 @@ import core.feature_core as core
 
 DEFAULT_SCORE_WEIGHTS = {
     "pop": 2.0,
+    "target_prior": 6.0,
     "repeat": 20.0,
     "collab": 2.0,
     "markov": 1.0,
@@ -48,6 +49,11 @@ def _feature_schema(ucols, icols):
             "in_hist",
             "count",
             "count_norm",
+            "count_log_norm",
+            "is_last_item",
+            "last_position_norm",
+            "run_count",
+            "run_count_norm",
             "popularity",
             "is_known_target",
             "target_freq",
@@ -59,7 +65,11 @@ def _feature_schema(ucols, icols):
         ]
         + [f"u_{column}" for column in ucols]
         + [f"i_{column}" for column in icols]
-        + ["ufeat_target_cond", "lastcat_target_cond"]
+        + [f"hist_{column}_share" for column in icols]
+        + [f"last_{column}_match" for column in icols]
+        + ["ufeat_target_cond"]
+        + [f"ucond_{column}" for column in ucols]
+        + ["lastcat_target_cond"]
     )
     cat_cols = [f"u_{column}" for column in ucols]
     cat_cols += [f"i_{column}" for column in icols if column.startswith("i_cat")]
@@ -259,12 +269,121 @@ def _user_condition_score(user_values, context, stats, normalize=True):
     return score
 
 
+def _candidate_sequence_features(candidates, ded, counts, context):
+    """候选在截断历史中的近期性与跨 run 重复特征。
+
+    ``ded`` 是 run-level 序列：连续重复已压成一个位置，但同一商品在非连续
+    run 中可多次出现。相比总次数 ``count``，run_count 和最后出现位置能区分
+    "一次连续刷很多次"与"跨多个阶段反复回来"两种复购模式。
+    """
+    candidates = np.asarray(candidates, dtype=np.int64)
+    candidate_iids = [context["items"][idx] for idx in candidates]
+    size = len(candidates)
+    if not ded:
+        zeros = np.zeros(size, dtype=np.float32)
+        return zeros, zeros.copy(), zeros.copy(), zeros.copy()
+
+    last_position: dict[str, int] = {}
+    run_counts: dict[str, int] = {}
+    for position, iid in enumerate(ded):
+        if iid not in context["iid2idx"]:
+            continue
+        last_position[iid] = position
+        run_counts[iid] = run_counts.get(iid, 0) + 1
+
+    length = max(len(ded), 1)
+    maximum_runs = max(run_counts.values(), default=1)
+    last_iid = ded[-1]
+    is_last = np.asarray([iid == last_iid for iid in candidate_iids], dtype=np.float32)
+    # 未出现候选为 0；历史中越靠近末尾越接近 1。
+    position_norm = np.asarray(
+        [(last_position[iid] + 1) / length if iid in last_position else 0.0
+         for iid in candidate_iids],
+        dtype=np.float32,
+    )
+    run_count = np.asarray([run_counts.get(iid, 0) for iid in candidate_iids], dtype=np.float32)
+    run_count_norm = run_count / float(maximum_runs)
+    return is_last, position_norm, run_count, run_count_norm
+
+
+def _history_item_profile_features(candidates, ded, counts, context):
+    """用户历史商品属性分布与候选属性的匹配度。
+
+    对每个 item 元数据列输出两类特征：
+      - hist_<col>_share：历史加权质量中，与候选属性值相同的占比；
+      - last_<col>_match：候选与最后一个历史商品的属性是否相同。
+
+    权重使用 sqrt(count)，既保留复购强度，又避免极端 count 完全支配画像。
+    """
+    candidates = np.asarray(candidates, dtype=np.int64)
+    n_candidates, n_columns = len(candidates), len(context["icols"])
+    shares = np.zeros((n_candidates, n_columns), dtype=np.float32)
+    last_matches = np.zeros((n_candidates, n_columns), dtype=np.float32)
+    if not ded or n_columns == 0:
+        return shares, last_matches
+
+    # 同一商品只进入画像一次，强度由累计 count 表示。
+    history_indices = list(dict.fromkeys(
+        context["iid2idx"][iid] for iid in ded if iid in context["iid2idx"]
+    ))
+    if not history_indices:
+        return shares, last_matches
+
+    history_weights = np.asarray(
+        [math.sqrt(counts.get(context["items"][idx], 1)) for idx in history_indices],
+        dtype=np.float32,
+    )
+    total_weight = float(history_weights.sum())
+    candidate_values = context["item_features"][candidates]
+    history_values = context["item_features"][history_indices]
+    last_idx = context["iid2idx"].get(ded[-1])
+
+    for column_idx in range(n_columns):
+        mass_by_value: dict[float, float] = {}
+        for value, weight in zip(history_values[:, column_idx], history_weights):
+            key = float(value)
+            mass_by_value[key] = mass_by_value.get(key, 0.0) + float(weight)
+        if total_weight > 0:
+            shares[:, column_idx] = np.asarray(
+                [mass_by_value.get(float(value), 0.0) / total_weight
+                 for value in candidate_values[:, column_idx]],
+                dtype=np.float32,
+            )
+        if last_idx is not None:
+            last_value = context["item_features"][last_idx, column_idx]
+            last_matches[:, column_idx] = (candidate_values[:, column_idx] == last_value)
+
+    return shares, last_matches
+
+
+def _user_condition_components(user_values, candidates, context, stats):
+    """拆出每个用户属性对应的 target 条件先验，避免只保留求和结果。"""
+    result = np.zeros((len(candidates), len(context["ucols"])), dtype=np.float32)
+    if user_values is None:
+        return result
+    for column_idx, (column, value) in enumerate(zip(context["ucols"], user_values)):
+        distribution = stats["user_cond"].get((column, value))
+        if distribution is not None:
+            result[:, column_idx] = distribution[candidates]
+    return result
+
+
 def _all_item_scores(ded, counts, uid, context, stats, score_weights=None):
     weights = DEFAULT_SCORE_WEIGHTS if score_weights is None else score_weights
     repeat, collaborative, markov, htarget = _user_full_scores(ded, counts, context, stats)
     user_cond = _user_condition_score(context["user_raw"].get(uid), context, stats, normalize=True)
+    # target 先验参与候选生成，而不只作为 ranker 特征。统计严格来自当前训练折；
+    # log 归一减弱头部 target 的垄断，同时让冷启动用户优先覆盖已知 target 池。
+    target_prior = np.zeros(context["n_item"], dtype=np.float32)
+    target_count_max = float(stats["target_count_max"])
+    if target_count_max > 0:
+        target_prior = (
+            np.log1p(stats["target_count"].astype(np.float32))
+            / math.log1p(target_count_max)
+        )
     score = (
         weights["pop"] * stats["pop"]
+        + weights.get("target_prior", 0.0) * target_prior
         + weights["repeat"] * repeat
         + weights["collab"] * collaborative
         + weights["markov"] * markov
@@ -293,6 +412,9 @@ def _assemble_features(candidates, ded, counts, uid, context, stats):
     in_history = np.asarray([iid in counts for iid in candidate_iids], dtype=np.float32)
     count = np.asarray([counts.get(iid, 0) for iid in candidate_iids], dtype=np.float32)
     count_norm = count / maximum_count
+    count_log_norm = np.log1p(count) / math.log1p(maximum_count)
+    is_last, last_position_norm, run_count, run_count_norm = _candidate_sequence_features(
+        candidates, ded, counts, context)
 
     components = core.candidate_components(
         ded,
@@ -316,6 +438,10 @@ def _assemble_features(candidates, ded, counts, uid, context, stats):
         stats,
         normalize=False,
     )[candidates]
+    user_cond_components = _user_condition_components(
+        context["user_raw"].get(uid), candidates, context, stats)
+    history_profile, last_profile_match = _history_item_profile_features(
+        candidates, ded, counts, context)
 
     # target 先验三列：是否曾作训练 target / 频次(归一) / 频次(log 归一)。
     tc = stats["target_count"][candidates].astype(np.float32)
@@ -332,6 +458,11 @@ def _assemble_features(candidates, ded, counts, uid, context, stats):
         in_history[:, None],
         count[:, None],
         count_norm[:, None],
+        count_log_norm[:, None],
+        is_last[:, None],
+        last_position_norm[:, None],
+        run_count[:, None],
+        run_count_norm[:, None],
         stats["pop"][candidates, None],
         is_known_target[:, None],
         target_freq[:, None],
@@ -342,7 +473,10 @@ def _assemble_features(candidates, ded, counts, uid, context, stats):
         htarget[:, None],
         user_features,
         context["item_features"][candidates],
+        history_profile,
+        last_profile_match,
         user_cond[:, None],
+        user_cond_components,
         last_cond[:, None],
     ]
     result = np.hstack(columns).astype(np.float32, copy=False)

@@ -95,15 +95,17 @@ metrics = experiment.run("cfg.json", overrides={"features.candidate_k": 200})  #
 - 折划分：`outer_folds=10/outer_fold=0/inner_folds=4`（holdout）、`n_folds=4`（submit）。
 - `watch_frac=0.2`：holdout 从 train 切独立 watch 做 early-stop 的比例。
 
-## 特征（25 列，定义在 build_features._feature_schema + _assemble_features）
+## 特征（46 列，定义在 build_features._feature_schema + _assemble_features）
 
-- **A 交互**：in_hist/count/count_norm（主信号，~56% target 在历史）
+- **A 交互**：in_hist/count/count_norm/count_log_norm（主信号，~56% target 在历史）
+- **A2 复购近期性**：is_last_item/last_position_norm/run_count/run_count_norm
 - **B 全局**：popularity（冷启动兜底）
 - **C 协同**：repeat/collab_score(ItemKNN)/markov/htarget（htarget 最强）
-- **D target 先验**：is_known_target/target_freq/target_freq_log（商品当过训练 target 的频次，与 popularity 互补，专攻非 repeat/冷启动）
+- **D target 先验**：is_known_target/target_freq/target_freq_log（商品当过训练 target 的频次，与 popularity 互补；同时以 log 先验参与候选生成，专攻非 repeat/冷启动）
 - **E 用户**：u_cat_01~08（cat_cols，LGB 走 categorical_feature）
 - **F 商品**：i_cat_01~03/i_bucket_01
-- **G 冷启动条件**：ufeat_target_cond/lastcat_target_cond
+- **G 历史类别画像**：每个商品属性的 hist_*_share 与 last_*_match（用户历史分布 × 候选属性）
+- **H 冷启动条件**：ufeat_target_cond + 8 个 ucond_* 分解先验 + lastcat_target_cond
 
 ## 加新模型
 

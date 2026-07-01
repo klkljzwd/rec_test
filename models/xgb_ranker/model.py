@@ -1,7 +1,7 @@
 """XGBoost LambdaMART 排序器 (rank:ndcg)。
 
-从 models/xgb_ranker.py 原样搬入，fit/predict_scores/feature_importance 逐行不变
-（约束 B：不破坏现有分数）。
+使用原生 ``xgb.train``；holdout 有 early stopping 时，预测只使用
+``best_iteration`` 之前的树，submit 无验证集时使用全部训练轮次。
 """
 from __future__ import annotations
 import numpy as np
@@ -47,7 +47,17 @@ class XGBRanker(RankerModel):
 
     def predict_scores(self, df, feat_cols):
         X = df[feat_cols].to_numpy(np.float32)
-        return self.model.predict(xgb.DMatrix(X))
+        dmatrix = xgb.DMatrix(X)
+        # xgb.train 的 early stopping 只记录最佳轮次，不会裁掉后续树；
+        # Booster.predict 默认使用完整模型，需显式限制到 best_iteration。
+        # best_iteration 从 0 开始，而 iteration_range 的右端为开区间。
+        best_iteration = getattr(self.model, "best_iteration", None)
+        if best_iteration is not None:
+            return self.model.predict(
+                dmatrix,
+                iteration_range=(0, best_iteration + 1),
+            )
+        return self.model.predict(dmatrix)
 
     def feature_importance(self):
         gain = self.model.get_score(importance_type="gain")

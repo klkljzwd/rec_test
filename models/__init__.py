@@ -23,6 +23,7 @@ from .deepfm.model import DeepFM  # noqa: F401
 from .xgb_ranker import run as _xgb_run  # noqa: F401  触发 @register_runner("xgb_ranker")
 from .lgb_ranker import run as _lgb_run  # noqa: F401  触发 @register_runner("lgb_ranker")
 from .deepfm import run as _deepfm_run  # noqa: F401  触发 @register_runner("deepfm")
+from .fusion import run as _fusion_run  # noqa: F401  触发 @register_runner("fusion")
 from .dispatcher import run_experiment
 
 __all__ = [

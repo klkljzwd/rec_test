@@ -37,7 +37,7 @@ MODEL_CONFIG = {
     "pipeline": {
         "topk": 10,
         "seed": 42,
-        "watch_frac": 0.2,
+        "watch_frac": 0.1,
         "out": "submissions/submission.csv",
     },
 }

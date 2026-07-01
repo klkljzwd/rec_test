@@ -230,11 +230,20 @@ class DeepFM(RankerModel):
         self.net.eval()
 
     def _predict_internal(self, df: pd.DataFrame) -> np.ndarray:
-        num_x, cat_x, _, _ = self._split_feats(df, self._feat_cols, self._cat_cols)
-        with torch.no_grad():
-            num_t = torch.from_numpy(num_x).to(self._device)
-            cat_t = {c: torch.from_numpy(cat_x[c]).to(self._device) for c in cat_x}
-            return self.net(num_t, cat_t).cpu().numpy().astype(np.float32)
+        # no_grad 只关闭梯度，不会关闭 Dropout。watch early-stop 发生在训练循环中，
+        # 因此预测前必须临时切到 eval，否则每次 watch NDCG 都带随机噪声；预测后
+        # 恢复原训练状态，确保下一 epoch 的 Dropout 继续生效。
+        was_training = self.net.training
+        self.net.eval()
+        try:
+            num_x, cat_x, _, _ = self._split_feats(df, self._feat_cols, self._cat_cols)
+            with torch.no_grad():
+                num_t = torch.from_numpy(num_x).to(self._device)
+                cat_t = {c: torch.from_numpy(cat_x[c]).to(self._device) for c in cat_x}
+                return self.net(num_t, cat_t).cpu().numpy().astype(np.float32)
+        finally:
+            if was_training:
+                self.net.train()
 
     def _listnet_loss(self, logit, label, starts, ends):
         """ListNet：每个 group 对 logits 做 softmax，与标签的 softmax 做 CE。
