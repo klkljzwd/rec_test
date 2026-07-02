@@ -11,7 +11,7 @@ load.py，无需改任何中央文件。features/pipeline 值与原中央 config
 """
 MODEL_CONFIG = {
     "model_params": {
-        "n_estimators": 3000,
+        "n_estimators": 1400,
         "lr": 0.06,
         "max_depth": 5,
         "subsample": 0.8,
@@ -38,7 +38,7 @@ MODEL_CONFIG = {
         "ease_lambda": 250.0,
         "ease_max_items": 1500,
         "itemknn_k": 200,
-        "outer_folds": 10,
+        "outer_folds": 7,
         "outer_fold": 0,
         "inner_folds": 4,
         "n_folds": 4,

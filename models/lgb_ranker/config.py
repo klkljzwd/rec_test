@@ -34,7 +34,7 @@ MODEL_CONFIG = {
         "ease_lambda": 250.0,
         "ease_max_items": 1500,
         "itemknn_k": 200,
-        "outer_folds": 10,
+        "outer_folds": 7,
         "outer_fold": 0,
         "inner_folds": 4,
         "n_folds": 4,
