@@ -50,7 +50,7 @@ def _coerce(v: str):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--datadir", default="data/A推荐")
-    ap.add_argument("--mode", choices=["holdout", "submit"], default="holdout")
+    ap.add_argument("--mode", choices=["holdout", "submit"], default="submit")
     ap.add_argument("--model", default="xgb_ranker", help="models/<name>/ 里的模型名")
     ap.add_argument("--out", help="提交输出路径（submit 模式）")
     ap.add_argument("--param", action="append", default=[],

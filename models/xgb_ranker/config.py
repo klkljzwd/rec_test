@@ -11,19 +11,19 @@ load.py，无需改任何中央文件。features/pipeline 值与原中央 config
 """
 MODEL_CONFIG = {
     "model_params": {
-        "n_estimators": 1400,
+        "n_estimators": 3000,
         "lr": 0.06,
-        "max_depth": 5,
+        "max_depth": 7,
         "subsample": 0.8,
         "colsample": 0.8,
-        "min_child_weight": 1.0,
-        "reg_lambda": 1.0,
+        "min_child_weight": 10.0,
+        "reg_lambda": 0.5,
         "early_stopping": 300,
         "verbose_eval": 50,
     },
     "features": {
-        "candidate_k": 25,
-        "train_candidate_k": 50,
+        "candidate_k": 100,
+        "train_candidate_k": 100,
         "hard_negative_ratio": 1.0,
         "score_weights": {
             "pop": 2.0,

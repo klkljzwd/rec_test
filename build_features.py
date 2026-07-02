@@ -679,6 +679,10 @@ def _build_validation_features(
     groups = []
     rng = np.random.RandomState(seed)
     cursor = 0
+    # 诊断（环境变量 RECALL_DIAG=1 触发）：记录每个 val 用户的 target 在全商品
+    # 合成分里的真实排名。判召回失败是"卡在 26-100"还是"100 名外信号缺失"。
+    diag_on = os.environ.get("RECALL_DIAG") == "1"
+    target_full_ranks: list[int] = []
 
     for record_idx in validation_indices:
         record_idx = int(record_idx)
@@ -690,6 +694,9 @@ def _build_validation_features(
         candidates = _generate_candidates(
             ded, counts, uid, context, stats, candidate_k,
             score_weights=score_weights)
+        if diag_on:
+            full = _all_item_scores(ded, counts, uid, context, stats, score_weights)
+            target_full_ranks.append(int((full > full[target_idx]).sum()) + 1)
         group_features = _assemble_features(candidates, ded, counts, uid, context, stats)
         end = cursor + candidate_k
         features[cursor:end] = group_features
@@ -700,6 +707,23 @@ def _build_validation_features(
         recall_ranks[cursor:end] = np.arange(candidate_k, dtype=np.int32)
         groups.append(candidate_k)
         cursor = end
+
+    if diag_on and target_full_ranks:
+        ranks = np.asarray(target_full_ranks, dtype=np.int64)
+        n = len(ranks)
+        bins = [1, 2, 6, 11, 26, 51, 101, 201, 501, 10**9]
+        labels_b = ["1", "2-5", "6-10", "11-25", "26-50", "51-100", "101-200", "201-500", "500+"]
+        print("\n" + "=" * 56)
+        print("[recall 诊断] target 在全商品合成分里的真实排名分布")
+        print(f"  val 用户数={n}  当前 candidate_k={candidate_k}")
+        for lo, hi, lb in zip(bins[:-1], bins[1:], labels_b):
+            cnt = int(((ranks >= lo) & (ranks < hi)).sum())
+            bar = "#" * int(cnt / n * 50)
+            print(f"  rank {lb:>10}: {cnt:5d} ({cnt/n*100:5.1f}%) {bar}")
+        for k in (25, 50, 100, 200, 500):
+            r = float((ranks <= k).mean())
+            print(f"  recall@{k:<4} = {r:.4f}  (↑candidate_k={k} 能多抓 {int((ranks<=k).sum())-(ranks<=candidate_k).sum()} 个)")
+        print("=" * 56 + "\n")
 
     frame = pd.DataFrame(features, columns=context["feat_cols"])
     frame["uid"] = output_uids
